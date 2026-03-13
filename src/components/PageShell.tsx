@@ -13,7 +13,7 @@ interface UserInfo {
 
 interface Props {
   user: UserInfo | null;
-  activePage: "home" | "timeline";
+  activePage: "home" | "timeline" | "user";
 }
 
 export default function PageShell({ user, activePage }: Props) {

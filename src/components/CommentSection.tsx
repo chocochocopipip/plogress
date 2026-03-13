@@ -107,36 +107,40 @@ export default function CommentSection({ entryId, currentUserId }: Props) {
                 alignItems: "flex-start",
               }}
             >
-              {c.authorAvatar ? (
-                <img
-                  src={c.authorAvatar}
-                  alt=""
-                  style={{
-                    width: 24,
-                    height: 24,
-                    borderRadius: "50%",
-                    objectFit: "cover",
-                    flexShrink: 0,
-                    marginTop: 2,
-                  }}
-                />
-              ) : (
-                <div
-                  style={{
-                    width: 24,
-                    height: 24,
-                    borderRadius: "50%",
-                    background: "#e8e8e8",
-                    flexShrink: 0,
-                    marginTop: 2,
-                  }}
-                />
-              )}
+              <a href={`/user/${c.userId}`} style={{ flexShrink: 0, marginTop: 2 }}>
+                {c.authorAvatar ? (
+                  <img
+                    src={c.authorAvatar}
+                    alt=""
+                    style={{
+                      width: 24,
+                      height: 24,
+                      borderRadius: "50%",
+                      objectFit: "cover",
+                      display: "block",
+                    }}
+                  />
+                ) : (
+                  <div
+                    style={{
+                      width: 24,
+                      height: 24,
+                      borderRadius: "50%",
+                      background: "#e8e8e8",
+                    }}
+                  />
+                )}
+              </a>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <span style={{ fontSize: 12, fontWeight: 600, color: "#444" }}>
+                  <a
+                    href={`/user/${c.userId}`}
+                    style={{ fontSize: 12, fontWeight: 600, color: "#444", textDecoration: "none" }}
+                    onMouseEnter={(e) => (e.currentTarget.style.textDecoration = "underline")}
+                    onMouseLeave={(e) => (e.currentTarget.style.textDecoration = "none")}
+                  >
                     {c.authorName || "匿名"}
-                  </span>
+                  </a>
                   <span style={{ fontSize: 10, color: "#bbb" }}>
                     {timeAgo(c.createdAt)}
                   </span>

@@ -22,7 +22,8 @@ export interface EntryMeta {
 export function generateId(): string {
   const now = new Date();
   const pad = (n: number, len = 2) => String(n).padStart(len, "0");
-  return `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+  const rand = Math.random().toString(36).substring(2, 6);
+  return `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}${pad(now.getMilliseconds(), 3)}-${rand}`;
 }
 
 export function getImageUrl(userId: string, entryId: string, filename: string): string {

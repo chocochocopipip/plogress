@@ -21,7 +21,7 @@ interface Props {
   entryCount: number;
   entryDates: string[];
   user: UserInfo | null;
-  activePage?: "home" | "timeline";
+  activePage?: "home" | "timeline" | "user";
 }
 
 // ── Color Picker Row ──
@@ -333,7 +333,9 @@ export default function Header({ entryCount, entryDates, user, activePage = "hom
               タイムライン
             </a>
           </nav>
-          <span style={{ fontSize: 12, color: "#999" }}>{entryCount}日 記録済み</span>
+          {activePage === "home" && (
+            <span style={{ fontSize: 12, color: "#999" }}>{entryCount}件の記録</span>
+          )}
         </div>
 
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>

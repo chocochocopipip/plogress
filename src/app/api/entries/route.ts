@@ -11,7 +11,8 @@ export async function GET(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const mine = request.nextUrl.searchParams.get("mine") === "true";
-  const filterUserId = mine ? user?.id : undefined;
+  const userId = request.nextUrl.searchParams.get("userId");
+  const filterUserId = mine ? user?.id : userId || undefined;
 
   const entries = await getAllEntries(supabase, user?.id, filterUserId);
   return NextResponse.json(entries);

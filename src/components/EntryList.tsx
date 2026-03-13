@@ -184,7 +184,12 @@ function EntryCard({
             <img
               src={entry.authorAvatar}
               alt=""
-              style={{ width: 20, height: 20, borderRadius: "50%", objectFit: "cover" }}
+              onClick={(e) => {
+                e.stopPropagation();
+                window.location.href = `/user/${entry.user_id}`;
+              }}
+              style={{ width: 20, height: 20, borderRadius: "50%", objectFit: "cover", cursor: "pointer" }}
+              title={entry.authorName || undefined}
             />
           )}
           <span style={{ fontSize: 13, fontWeight: 700 }}>
@@ -617,7 +622,9 @@ function EntryPopup({
                 <img
                   src={entry.authorAvatar}
                   alt=""
-                  style={{ width: 24, height: 24, borderRadius: "50%", objectFit: "cover" }}
+                  onClick={() => { window.location.href = `/user/${entry.user_id}`; }}
+                  style={{ width: 24, height: 24, borderRadius: "50%", objectFit: "cover", cursor: "pointer" }}
+                  title={entry.authorName || undefined}
                 />
               )}
               {isEditing ? (
@@ -647,9 +654,14 @@ function EntryPopup({
                     {formatDate(entry?.date)}
                   </span>
                   {entry?.authorName && (
-                    <span style={{ fontSize: 11, color: "#999", marginLeft: 8 }}>
+                    <a
+                      href={`/user/${entry.user_id}`}
+                      style={{ fontSize: 11, color: "#999", marginLeft: 8, textDecoration: "none" }}
+                      onMouseEnter={(e) => (e.currentTarget.style.textDecoration = "underline")}
+                      onMouseLeave={(e) => (e.currentTarget.style.textDecoration = "none")}
+                    >
                       by {entry.authorName}
-                    </span>
+                    </a>
                   )}
                   {entry && !entry.isPublic && (
                     <span

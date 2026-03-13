@@ -212,3 +212,14 @@ export async function deleteCommentAction(commentId: string) {
   if (error) throw error;
   revalidatePath("/");
 }
+
+export async function updateBioAction(bio: string) {
+  const { supabase, user } = await getAuthUser();
+
+  const { error } = await supabase
+    .from("profiles")
+    .update({ bio: bio.slice(0, 240) })
+    .eq("id", user.id);
+
+  if (error) throw error;
+}
