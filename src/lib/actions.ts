@@ -85,13 +85,24 @@ export async function updateEntryAction(id: string, formData: FormData) {
     await deleteFile(`${user.id}/${id}/${img}`);
   }
 
+  // Use imageOrder to preserve drag-and-drop order
+  const imageOrderRaw = formData.get("imageOrder") as string | null;
+  let orderedImages: string[];
+  if (imageOrderRaw) {
+    const imageOrder: string[] = JSON.parse(imageOrderRaw);
+    // Only keep names that are in allNewImages (valid)
+    orderedImages = imageOrder.filter((name) => allNewImages.includes(name));
+  } else {
+    orderedImages = allNewImages;
+  }
+
   const { error } = await supabase
     .from("entries")
     .update({
       date,
       text,
       featured_image: featuredImage,
-      images: allNewImages,
+      images: orderedImages,
     })
     .eq("id", id);
 

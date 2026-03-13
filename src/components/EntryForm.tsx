@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, DragEvent as ReactDragEvent } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkBreaks from "remark-breaks";
 import type { EntryMeta } from "@/lib/entries";
@@ -36,6 +36,8 @@ export default function EntryForm({ onSubmit, initial }: Props) {
   const [featured, setFeatured] = useState(initial?.featuredImage || "");
   const [submitting, setSubmitting] = useState(false);
   const [dragging, setDragging] = useState(false);
+  const [dragIdx, setDragIdx] = useState<number | null>(null);
+  const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const addFiles = useCallback(
@@ -68,6 +70,39 @@ export default function EntryForm({ onSubmit, initial }: Props) {
     }
   };
 
+  const handleThumbDragStart = (e: ReactDragEvent, idx: number) => {
+    setDragIdx(idx);
+    e.dataTransfer.effectAllowed = "move";
+  };
+
+  const handleThumbDragOver = (e: ReactDragEvent, idx: number) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    setDragOverIdx(idx);
+  };
+
+  const handleThumbDrop = (e: ReactDragEvent, idx: number) => {
+    e.preventDefault();
+    if (dragIdx === null || dragIdx === idx) {
+      setDragIdx(null);
+      setDragOverIdx(null);
+      return;
+    }
+    setImages((prev) => {
+      const updated = [...prev];
+      const [moved] = updated.splice(dragIdx, 1);
+      updated.splice(idx, 0, moved);
+      return updated;
+    });
+    setDragIdx(null);
+    setDragOverIdx(null);
+  };
+
+  const handleThumbDragEnd = () => {
+    setDragIdx(null);
+    setDragOverIdx(null);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
@@ -77,15 +112,19 @@ export default function EntryForm({ onSubmit, initial }: Props) {
     formData.set("text", text);
     formData.set("featuredImage", featured);
 
+    // Preserve exact order: send ordered list of names + new files
     const keepImages: string[] = [];
+    const orderedNames: string[] = [];
     for (const img of images) {
       if (img.file) {
         formData.append("images", img.file);
       } else if (img.isExisting) {
         keepImages.push(img.name);
       }
+      orderedNames.push(img.name);
     }
     formData.set("keepImages", JSON.stringify(keepImages));
+    formData.set("imageOrder", JSON.stringify(orderedNames));
 
     await onSubmit(formData);
     setSubmitting(false);
@@ -268,83 +307,100 @@ export default function EntryForm({ onSubmit, initial }: Props) {
             />
           </div>
 
-          {/* Preview thumbnails */}
+          {/* Preview thumbnails — drag to reorder */}
           {images.length > 0 && (
-            <div
-              style={{
-                display: "flex",
-                flexWrap: "wrap",
-                gap: 8,
-                marginTop: 12,
-              }}
-            >
-              {images.map((img) => (
-                <div key={img.name} style={{ position: "relative" }}>
-                  <img
-                    src={img.url}
-                    alt={img.name}
-                    onClick={() => setFeatured(img.name)}
+            <>
+              <div style={{ fontSize: 10, color: "#bbb", marginTop: 10, marginBottom: 4 }}>
+                ドラッグで順番を変更 ・ クリックでハイライト設定
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: 8,
+                }}
+              >
+                {images.map((img, idx) => (
+                  <div
+                    key={img.name}
+                    draggable
+                    onDragStart={(e) => handleThumbDragStart(e, idx)}
+                    onDragOver={(e) => handleThumbDragOver(e, idx)}
+                    onDrop={(e) => handleThumbDrop(e, idx)}
+                    onDragEnd={handleThumbDragEnd}
                     style={{
-                      width: 72,
-                      height: 72,
-                      objectFit: "cover",
-                      borderRadius: 8,
-                      border:
-                        featured === img.name
-                          ? "2px solid #f59e0b"
-                          : "1px solid #e0e0e0",
-                      display: "block",
-                      cursor: "pointer",
-                    }}
-                  />
-                  {featured === img.name && (
-                    <span
-                      style={{
-                        position: "absolute",
-                        bottom: -4,
-                        left: "50%",
-                        transform: "translateX(-50%)",
-                        background: "var(--color-secondary)",
-                        color: "#fff",
-                        fontSize: 9,
-                        fontWeight: 700,
-                        padding: "1px 6px",
-                        borderRadius: 3,
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      ハイライト
-                    </span>
-                  )}
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      removeImage(img.name);
-                    }}
-                    style={{
-                      position: "absolute",
-                      top: -5,
-                      right: -5,
-                      background: "var(--color-primary)",
-                      color: "#fff",
-                      border: "none",
-                      borderRadius: "50%",
-                      width: 18,
-                      height: 18,
-                      fontSize: 10,
-                      cursor: "pointer",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      fontWeight: 700,
+                      position: "relative",
+                      opacity: dragIdx === idx ? 0.4 : 1,
+                      transform: dragOverIdx === idx && dragIdx !== idx ? "scale(1.08)" : "none",
+                      transition: "transform 0.15s, opacity 0.15s",
                     }}
                   >
-                    ×
-                  </button>
-                </div>
-              ))}
-            </div>
+                    <img
+                      src={img.url}
+                      alt={img.name}
+                      onClick={() => setFeatured(img.name)}
+                      style={{
+                        width: 72,
+                        height: 72,
+                        objectFit: "cover",
+                        borderRadius: 8,
+                        border:
+                          featured === img.name
+                            ? "2px solid #f59e0b"
+                            : "1px solid #e0e0e0",
+                        display: "block",
+                        cursor: "grab",
+                      }}
+                    />
+                    {featured === img.name && (
+                      <span
+                        style={{
+                          position: "absolute",
+                          bottom: -4,
+                          left: "50%",
+                          transform: "translateX(-50%)",
+                          background: "var(--color-secondary)",
+                          color: "#fff",
+                          fontSize: 9,
+                          fontWeight: 700,
+                          padding: "1px 6px",
+                          borderRadius: 3,
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        ハイライト
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        removeImage(img.name);
+                      }}
+                      style={{
+                        position: "absolute",
+                        top: -5,
+                        right: -5,
+                        background: "var(--color-primary)",
+                        color: "#fff",
+                        border: "none",
+                        borderRadius: "50%",
+                        width: 18,
+                        height: 18,
+                        fontSize: 10,
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontWeight: 700,
+                      }}
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </>
           )}
         </div>
 

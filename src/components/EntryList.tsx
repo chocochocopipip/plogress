@@ -13,7 +13,7 @@ import {
 import LikeButton from "./LikeButton";
 import CommentSection from "./CommentSection";
 
-const MAX_VISIBLE = 9;
+const MAX_VISIBLE = 6;
 
 function formatDate(dateStr: string | undefined) {
   if (!dateStr) return "日付なし";
@@ -32,8 +32,19 @@ function imgUrl(entry: EntryMeta, img: string): string {
 
 function imgStyle(
   originalSize: boolean,
-  isFeatured: boolean
+  isFeatured: boolean,
+  isCard: boolean = false
 ): React.CSSProperties {
+  if (isCard) {
+    return {
+      width: "100%",
+      aspectRatio: "1/1",
+      objectFit: "cover",
+      display: "block",
+      transition: "opacity 0.15s",
+      background: "#f7f7f5",
+    };
+  }
   if (originalSize) {
     return {
       width: "100%",
@@ -65,13 +76,13 @@ const memoStyle: React.CSSProperties = {
 };
 
 const cardMemoStyle: React.CSSProperties = {
-  margin: "10px 2px 2px",
+  margin: "10px 2px 6px",
   fontSize: 12,
   color: "#666",
   lineHeight: 1.7,
   wordBreak: "break-word",
   overflow: "hidden",
-  maxHeight: "4.2em",
+  maxHeight: "6em",
 };
 
 function Markdown({ text, style }: { text: string; style?: React.CSSProperties }) {
@@ -141,7 +152,7 @@ function EntryCard({
         cursor: "pointer",
         transition: "box-shadow 0.15s, transform 0.15s",
         flexShrink: 0,
-        width: 420,
+        width: 340,
       }}
       onMouseEnter={(e) => {
         e.currentTarget.style.boxShadow = "0 4px 16px rgba(0,0,0,0.09)";
@@ -254,7 +265,13 @@ function EntryCard({
               <img
                 src={imgUrl(entry, entry.featuredImage)}
                 alt=""
-                style={imgStyle(originalSize, true)}
+                style={{
+                  width: "100%",
+                  maxHeight: 180,
+                  objectFit: "cover",
+                  display: "block",
+                  background: "#f7f7f5",
+                }}
               />
             </div>
             <span
@@ -297,8 +314,8 @@ function EntryCard({
                     src={imgUrl(entry, img)}
                     alt=""
                     style={{
-                      ...imgStyle(originalSize, false),
-                      borderRadius: 8,
+                      ...imgStyle(originalSize, false, true),
+                      borderRadius: 6,
                       border: isFeatured
                         ? "2px solid var(--color-secondary)"
                         : "1px solid #ebebeb",
@@ -308,13 +325,13 @@ function EntryCard({
                     <span
                       style={{
                         position: "absolute",
-                        top: 4,
-                        left: 4,
+                        top: 3,
+                        left: 3,
                         background: "var(--color-secondary)",
                         color: "#fff",
-                        fontSize: 9,
+                        fontSize: 8,
                         fontWeight: 700,
-                        padding: "2px 6px",
+                        padding: "1px 5px",
                         borderRadius: 3,
                       }}
                     >
@@ -618,6 +635,7 @@ export default function EntryList({
   const [originalSize, setOriginalSize] = useState(true);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [entryList, setEntryList] = useState(entries);
+  const [searchQuery, setSearchQuery] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -682,12 +700,76 @@ export default function EntryList({
     );
   }, [currentUserId]);
 
+  const filteredEntries = searchQuery.trim()
+    ? entryList.filter((e) =>
+        e.text.toLowerCase().includes(searchQuery.trim().toLowerCase())
+      )
+    : entryList;
+
   const detailEntry = detailId
     ? entryList.find((e) => e.id === detailId) || null
     : null;
 
   return (
     <>
+      {/* Search bar */}
+      {entryList.length > 0 && (
+        <div style={{ marginBottom: 14, position: "relative", maxWidth: 320 }}>
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="テキストで検索..."
+            style={{
+              width: "100%",
+              padding: "8px 12px 8px 32px",
+              border: "1px solid #e0e0e0",
+              borderRadius: 8,
+              fontSize: 13,
+              outline: "none",
+              background: "#fafafa",
+              color: "var(--color-primary)",
+              fontFamily: "inherit",
+              boxSizing: "border-box",
+            }}
+            onFocus={(e) => (e.currentTarget.style.borderColor = "var(--color-primary)")}
+            onBlur={(e) => (e.currentTarget.style.borderColor = "#e0e0e0")}
+          />
+          <span
+            style={{
+              position: "absolute",
+              left: 10,
+              top: "50%",
+              transform: "translateY(-50%)",
+              fontSize: 14,
+              color: "#bbb",
+              pointerEvents: "none",
+            }}
+          >
+            🔍
+          </span>
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery("")}
+              style={{
+                position: "absolute",
+                right: 8,
+                top: "50%",
+                transform: "translateY(-50%)",
+                background: "none",
+                border: "none",
+                fontSize: 14,
+                color: "#bbb",
+                cursor: "pointer",
+                padding: "0 4px",
+              }}
+            >
+              ×
+            </button>
+          )}
+        </div>
+      )}
+
       {entryList.length === 0 ? (
         <div
           style={{
@@ -703,13 +785,25 @@ export default function EntryList({
             「+ 記録を追加」から始めましょう。
           </p>
         </div>
+      ) : filteredEntries.length === 0 && searchQuery ? (
+        <div
+          style={{
+            textAlign: "center",
+            padding: "60px 20px",
+            color: "#bbb",
+          }}
+        >
+          <p style={{ fontSize: 14 }}>
+            「{searchQuery}」に一致する記録が見つかりませんでした。
+          </p>
+        </div>
       ) : (
         <div
           ref={scrollRef}
           style={{
             overflowX: "auto",
             overflowY: "hidden",
-            height: "calc(100vh - 112px)",
+            height: "calc(100vh - 150px)",
           }}
         >
           <div
@@ -721,7 +815,7 @@ export default function EntryList({
               alignItems: "flex-start",
             }}
           >
-            {entryList.map((entry) => (
+            {filteredEntries.map((entry) => (
               <EntryCard
                 key={entry.id}
                 entry={entry}
