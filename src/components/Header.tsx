@@ -439,17 +439,19 @@ export default function Header({ entryCount, entryDates, user, activePage = "hom
                 + 記録を追加
               </button>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: 4 }}>
-                {user.avatar ? (
-                  <img
-                    src={user.avatar}
-                    alt=""
-                    style={{ width: 28, height: 28, borderRadius: "50%", objectFit: "cover" }}
-                  />
-                ) : (
-                  <div style={{ width: 28, height: 28, borderRadius: "50%", background: "#e0e0e0", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, color: "#888" }}>
-                    {user.name?.[0] || "?"}
-                  </div>
-                )}
+                <a href={`/user/${user.id}`} title="マイページ">
+                  {user.avatar ? (
+                    <img
+                      src={user.avatar}
+                      alt=""
+                      style={{ width: 28, height: 28, borderRadius: "50%", objectFit: "cover", display: "block" }}
+                    />
+                  ) : (
+                    <div style={{ width: 28, height: 28, borderRadius: "50%", background: "#e0e0e0", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, color: "#888" }}>
+                      {user.name?.[0] || "?"}
+                    </div>
+                  )}
+                </a>
                 <button
                   onClick={async () => {
                     const supabase = createClient();

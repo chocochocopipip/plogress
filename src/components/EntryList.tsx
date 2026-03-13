@@ -83,8 +83,6 @@ const cardMemoStyle: React.CSSProperties = {
   color: "#666",
   lineHeight: 1.7,
   wordBreak: "break-word",
-  overflow: "hidden",
-  maxHeight: "6em",
 };
 
 function Markdown({ text, style }: { text: string; style?: React.CSSProperties }) {
@@ -159,6 +157,9 @@ function EntryCard({
         transition: "box-shadow 0.15s, transform 0.15s",
         flexShrink: 0,
         width: 340,
+        display: "flex",
+        flexDirection: "column" as const,
+        maxHeight: "100%",
       }}
       onMouseEnter={(e) => {
         e.currentTarget.style.boxShadow = "0 4px 16px rgba(0,0,0,0.09)";
@@ -255,7 +256,7 @@ function EntryCard({
       </div>
 
       {/* Card Body */}
-      <div style={{ padding: "10px 12px" }}>
+      <div style={{ padding: "10px 12px", overflowY: "auto", flex: 1, minHeight: 0 }}>
         {entry.featuredImage && (
           <div
             style={{
