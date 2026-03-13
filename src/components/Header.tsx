@@ -21,6 +21,7 @@ interface Props {
   entryCount: number;
   entryDates: string[];
   user: UserInfo | null;
+  activePage?: "home" | "timeline";
 }
 
 // ── Color Picker Row ──
@@ -216,7 +217,7 @@ function CalendarPopup({
 
 // ── Header ──
 
-export default function Header({ entryCount, entryDates, user }: Props) {
+export default function Header({ entryCount, entryDates, user, activePage = "home" }: Props) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [showAllImages, setShowAllImages] = useState(false);
@@ -300,6 +301,38 @@ export default function Header({ entryCount, entryDates, user }: Props) {
           <a href="/" style={{ fontSize: 15, fontWeight: 700, letterSpacing: "-0.3px", color: "var(--color-primary)", textDecoration: "none" }}>
             Plogress
           </a>
+          <nav style={{ display: "flex", gap: 4 }}>
+            <a
+              href="/"
+              style={{
+                fontSize: 12,
+                fontWeight: activePage === "home" ? 700 : 500,
+                color: activePage === "home" ? "var(--color-primary)" : "#999",
+                textDecoration: "none",
+                padding: "4px 10px",
+                borderRadius: 6,
+                background: activePage === "home" ? "#f5f5f5" : "transparent",
+                transition: "all 0.15s",
+              }}
+            >
+              マイ記録
+            </a>
+            <a
+              href="/timeline"
+              style={{
+                fontSize: 12,
+                fontWeight: activePage === "timeline" ? 700 : 500,
+                color: activePage === "timeline" ? "var(--color-primary)" : "#999",
+                textDecoration: "none",
+                padding: "4px 10px",
+                borderRadius: 6,
+                background: activePage === "timeline" ? "#f5f5f5" : "transparent",
+                transition: "all 0.15s",
+              }}
+            >
+              タイムライン
+            </a>
+          </nav>
           <span style={{ fontSize: 12, color: "#999" }}>{entryCount}日 記録済み</span>
         </div>
 

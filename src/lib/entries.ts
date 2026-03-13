@@ -30,9 +30,10 @@ export function getImageUrl(userId: string, entryId: string, filename: string): 
 
 export async function getAllEntries(
   supabase: SupabaseClient,
-  currentUserId?: string
+  currentUserId?: string,
+  filterUserId?: string
 ): Promise<EntryMeta[]> {
-  const { data: entries, error } = await supabase
+  let query = supabase
     .from("entries")
     .select(`
       *,
@@ -40,6 +41,12 @@ export async function getAllEntries(
       comments (id)
     `)
     .order("created_at", { ascending: false });
+
+  if (filterUserId) {
+    query = query.eq("user_id", filterUserId);
+  }
+
+  const { data: entries, error } = await query;
 
   if (error) throw error;
   if (!entries) return [];
