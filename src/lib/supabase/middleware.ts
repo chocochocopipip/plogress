@@ -25,6 +25,23 @@ export async function updateSession(request: NextRequest) {
     }
   );
 
+  // Handle auth code on any route (Supabase may redirect code to / or /auth/callback)
+  const code = request.nextUrl.searchParams.get("code");
+  if (code) {
+    const { error } = await supabase.auth.exchangeCodeForSession(code);
+    if (!error) {
+      // Remove code from URL and redirect
+      const url = request.nextUrl.clone();
+      url.searchParams.delete("code");
+      const redirectResponse = NextResponse.redirect(url);
+      // Copy cookies from supabase response
+      supabaseResponse.cookies.getAll().forEach((cookie) => {
+        redirectResponse.cookies.set(cookie.name, cookie.value);
+      });
+      return redirectResponse;
+    }
+  }
+
   const {
     data: { user },
   } = await supabase.auth.getUser();
