@@ -32,6 +32,8 @@ export async function createEntryAction(formData: FormData) {
     imageNames.push(file.name);
   }
 
+  const isPublic = formData.get("isPublic") !== "false";
+
   const { error } = await supabase.from("entries").insert({
     id,
     user_id: user.id,
@@ -39,6 +41,7 @@ export async function createEntryAction(formData: FormData) {
     text,
     featured_image: featuredImage,
     images: imageNames,
+    is_public: isPublic,
   });
 
   if (error) throw error;
@@ -94,6 +97,8 @@ export async function updateEntryAction(id: string, formData: FormData) {
     orderedImages = allNewImages;
   }
 
+  const isPublic = formData.get("isPublic") !== "false";
+
   const { error } = await supabase
     .from("entries")
     .update({
@@ -101,6 +106,7 @@ export async function updateEntryAction(id: string, formData: FormData) {
       text,
       featured_image: featuredImage,
       images: orderedImages,
+      is_public: isPublic,
     })
     .eq("id", id);
 

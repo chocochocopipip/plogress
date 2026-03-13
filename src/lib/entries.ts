@@ -7,6 +7,7 @@ export interface EntryMeta {
   text: string;
   featuredImage: string;
   images: string[]; // filenames stored in DB, full URLs constructed at read time
+  isPublic: boolean;
   createdAt: string;
   updatedAt: string;
   // Aggregated
@@ -58,7 +59,12 @@ export async function getAllEntries(
     : { data: [] };
   const profileMap = new Map((profiles || []).map((p) => [p.id, p]));
 
-  return entries.map((e) => {
+  // Filter out private entries that don't belong to the current user
+  const visibleEntries = entries.filter(
+    (e) => e.is_public !== false || e.user_id === currentUserId
+  );
+
+  return visibleEntries.map((e) => {
     const profile = profileMap.get(e.user_id);
     return {
       id: e.id,
@@ -67,6 +73,7 @@ export async function getAllEntries(
       text: e.text,
       featuredImage: e.featured_image,
       images: e.images || [],
+      isPublic: e.is_public !== false,
       createdAt: e.created_at,
       updatedAt: e.updated_at,
       likeCount: e.likes?.length || 0,
@@ -97,6 +104,9 @@ export async function getEntry(
 
   if (error || !e) return null;
 
+  // Private entry: only owner can see
+  if (e.is_public === false && e.user_id !== currentUserId) return null;
+
   const { data: profile } = await supabase
     .from("profiles")
     .select("display_name, avatar_url")
@@ -110,6 +120,7 @@ export async function getEntry(
     text: e.text,
     featuredImage: e.featured_image,
     images: e.images || [],
+    isPublic: e.is_public !== false,
     createdAt: e.created_at,
     updatedAt: e.updated_at,
     likeCount: e.likes?.length || 0,

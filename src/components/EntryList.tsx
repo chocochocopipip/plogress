@@ -201,6 +201,20 @@ function EntryCard({
           >
             {entry.images.length}枚
           </span>
+          {!entry.isPublic && (
+            <span
+              style={{
+                fontSize: 10,
+                color: "#e67e22",
+                background: "#fef3e2",
+                borderRadius: 4,
+                padding: "2px 6px",
+                fontWeight: 600,
+              }}
+            >
+              非公開
+            </span>
+          )}
         </div>
         <div
           style={{ display: "flex", gap: 4, alignItems: "center" }}
@@ -374,7 +388,7 @@ function EntryPopup({
 }) {
   const isOwner = entry ? currentUserId === entry.user_id : true;
   const [mode, setMode] = useState<PopupMode>(initialMode);
-  const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
+  const [lightboxIdx, setLightboxIdx] = useState<number | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   // Edit/create form state
@@ -393,6 +407,7 @@ function EntryPopup({
     return [];
   });
   const [editFeatured, setEditFeatured] = useState(entry?.featuredImage || "");
+  const [editPublic, setEditPublic] = useState(entry?.isPublic !== false);
   const [fileDragging, setFileDragging] = useState(false);
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
@@ -409,11 +424,25 @@ function EntryPopup({
     onClose();
   };
 
+  const imageCount = entry?.images.length || 0;
+
+  const lightboxPrev = () => {
+    if (lightboxIdx === null || imageCount === 0) return;
+    setLightboxIdx((lightboxIdx - 1 + imageCount) % imageCount);
+  };
+  const lightboxNext = () => {
+    if (lightboxIdx === null || imageCount === 0) return;
+    setLightboxIdx((lightboxIdx + 1) % imageCount);
+  };
+
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
-        if (lightboxSrc) setLightboxSrc(null);
+        if (lightboxIdx !== null) setLightboxIdx(null);
         else onClose();
+      } else if (lightboxIdx !== null) {
+        if (e.key === "ArrowLeft") lightboxPrev();
+        else if (e.key === "ArrowRight") lightboxNext();
       }
     };
     document.addEventListener("keydown", handleKey);
@@ -422,7 +451,7 @@ function EntryPopup({
       document.removeEventListener("keydown", handleKey);
       document.body.style.overflow = "";
     };
-  }, [onClose, lightboxSrc]);
+  }, [onClose, lightboxIdx, imageCount]);
 
   // Switch to edit mode
   const startEditing = () => {
@@ -437,6 +466,7 @@ function EntryPopup({
       }))
     );
     setEditFeatured(entry.featuredImage);
+    setEditPublic(entry.isPublic !== false);
     setMode("edit");
   };
 
@@ -535,6 +565,7 @@ function EntryPopup({
       }
       formData.set("keepImages", JSON.stringify(keepImages));
       formData.set("imageOrder", JSON.stringify(orderedNames));
+      formData.set("isPublic", editPublic ? "true" : "false");
 
       if (mode === "create") {
         await createEntryAction(formData);
@@ -618,6 +649,21 @@ function EntryPopup({
                   {entry?.authorName && (
                     <span style={{ fontSize: 11, color: "#999", marginLeft: 8 }}>
                       by {entry.authorName}
+                    </span>
+                  )}
+                  {entry && !entry.isPublic && (
+                    <span
+                      style={{
+                        fontSize: 10,
+                        color: "#e67e22",
+                        background: "#fef3e2",
+                        borderRadius: 4,
+                        padding: "2px 6px",
+                        fontWeight: 600,
+                        marginLeft: 8,
+                      }}
+                    >
+                      非公開
                     </span>
                   )}
                 </div>
@@ -941,6 +987,38 @@ function EntryPopup({
                     </div>
                   </div>
                 </div>
+
+                {/* Public/Private toggle */}
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    marginTop: 16,
+                    padding: "12px 14px",
+                    background: "#fafafa",
+                    borderRadius: 8,
+                    border: "1px solid #ebebeb",
+                  }}
+                >
+                  <div>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: "#444" }}>
+                      {editPublic ? "公開" : "非公開"}
+                    </span>
+                    <span style={{ fontSize: 11, color: "#999", marginLeft: 8 }}>
+                      {editPublic
+                        ? "タイムラインに表示されます"
+                        : "自分だけが見られます"}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    className={`toggle-btn ${editPublic ? "on" : ""}`}
+                    onClick={() => setEditPublic(!editPublic)}
+                  >
+                    <span className="toggle-knob" />
+                  </button>
+                </div>
               </>
             ) : (
               /* ── View body ── */
@@ -955,7 +1033,7 @@ function EntryPopup({
                       marginBottom: 16,
                     }}
                   >
-                    {entry.images.map((img) => {
+                    {entry.images.map((img, idx) => {
                       const isFeatured = img === entry.featuredImage;
                       const src = imgUrl(entry, img);
                       return (
@@ -975,7 +1053,7 @@ function EntryPopup({
                                 ? "2px solid var(--color-secondary)"
                                 : "1px solid #ebebeb",
                             }}
-                            onClick={() => setLightboxSrc(src)}
+                            onClick={() => setLightboxIdx(idx)}
                           />
                           {isFeatured && (
                             <span
@@ -1035,13 +1113,118 @@ function EntryPopup({
         </div>
       </div>
 
-      {/* Lightbox */}
-      {lightboxSrc && (
+      {/* Lightbox with navigation */}
+      {lightboxIdx !== null && entry && (
         <div
           className="lightbox active"
-          onClick={() => setLightboxSrc(null)}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setLightboxIdx(null);
+          }}
         >
-          <img src={lightboxSrc} alt="" />
+          {/* Close button */}
+          <button
+            onClick={() => setLightboxIdx(null)}
+            style={{
+              position: "fixed",
+              top: 16,
+              right: 16,
+              background: "rgba(0,0,0,0.5)",
+              color: "#fff",
+              border: "none",
+              borderRadius: "50%",
+              width: 40,
+              height: 40,
+              fontSize: 20,
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              zIndex: 1001,
+            }}
+          >
+            ✕
+          </button>
+
+          {/* Prev button */}
+          {imageCount > 1 && (
+            <button
+              onClick={(e) => { e.stopPropagation(); lightboxPrev(); }}
+              style={{
+                position: "fixed",
+                left: 16,
+                top: "50%",
+                transform: "translateY(-50%)",
+                background: "rgba(0,0,0,0.5)",
+                color: "#fff",
+                border: "none",
+                borderRadius: "50%",
+                width: 44,
+                height: 44,
+                fontSize: 22,
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                zIndex: 1001,
+              }}
+            >
+              ‹
+            </button>
+          )}
+
+          {/* Image */}
+          <img
+            src={imgUrl(entry, entry.images[lightboxIdx])}
+            alt=""
+            onClick={(e) => e.stopPropagation()}
+          />
+
+          {/* Next button */}
+          {imageCount > 1 && (
+            <button
+              onClick={(e) => { e.stopPropagation(); lightboxNext(); }}
+              style={{
+                position: "fixed",
+                right: 16,
+                top: "50%",
+                transform: "translateY(-50%)",
+                background: "rgba(0,0,0,0.5)",
+                color: "#fff",
+                border: "none",
+                borderRadius: "50%",
+                width: 44,
+                height: 44,
+                fontSize: 22,
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                zIndex: 1001,
+              }}
+            >
+              ›
+            </button>
+          )}
+
+          {/* Counter */}
+          {imageCount > 1 && (
+            <div
+              style={{
+                position: "fixed",
+                bottom: 20,
+                left: "50%",
+                transform: "translateX(-50%)",
+                background: "rgba(0,0,0,0.5)",
+                color: "#fff",
+                fontSize: 13,
+                padding: "4px 14px",
+                borderRadius: 20,
+                zIndex: 1001,
+              }}
+            >
+              {lightboxIdx + 1} / {imageCount}
+            </div>
+          )}
         </div>
       )}
     </>
