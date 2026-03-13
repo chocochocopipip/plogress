@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import type { EntryMeta } from "@/lib/entries";
 import Header from "./Header";
 import EntryList from "./EntryList";
@@ -20,6 +20,14 @@ export default function PageShell({ user, activePage }: Props) {
   const [entries, setEntries] = useState<EntryMeta[] | null>(null);
 
   useEffect(() => {
+    const params = activePage === "home" ? "?mine=true" : "";
+    fetch(`/api/entries${params}`)
+      .then((res) => res.json())
+      .then((data) => setEntries(data))
+      .catch(() => setEntries([]));
+  }, [activePage]);
+
+  const fetchEntries = useCallback(() => {
     const params = activePage === "home" ? "?mine=true" : "";
     fetch(`/api/entries${params}`)
       .then((res) => res.json())
@@ -101,7 +109,7 @@ export default function PageShell({ user, activePage }: Props) {
             ))}
           </div>
         ) : (
-          <EntryList entries={entries} currentUserId={user?.id || null} />
+          <EntryList entries={entries} currentUserId={user?.id || null} onRefresh={fetchEntries} />
         )}
       </main>
     </>

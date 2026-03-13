@@ -1,11 +1,13 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, DragEvent as ReactDragEvent } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkBreaks from "remark-breaks";
 import type { EntryMeta } from "@/lib/entries";
 import { getImageUrl } from "@/lib/entries";
 import {
+  createEntryAction,
+  updateEntryAction,
   deleteEntryAction,
   setFeaturedImageAction,
   toggleLikeAction,
@@ -93,6 +95,15 @@ function Markdown({ text, style }: { text: string; style?: React.CSSProperties }
   );
 }
 
+// ── Image preview for edit mode ──
+
+interface ImagePreview {
+  name: string;
+  url: string;
+  file?: File;
+  isExisting?: boolean;
+}
+
 // ── Card ──
 
 function EntryCard({
@@ -127,11 +138,6 @@ function EntryCard({
   const handleImgClick = (e: React.MouseEvent, img: string) => {
     e.stopPropagation();
     if (isOwner) onSetFeatured(entry.id, img);
-  };
-
-  const handleEdit = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    window.location.href = `/entry/${entry.id}/edit`;
   };
 
   const handleDelete = (e: React.MouseEvent) => {
@@ -200,7 +206,6 @@ function EntryCard({
           style={{ display: "flex", gap: 4, alignItems: "center" }}
           onClick={(e) => e.stopPropagation()}
         >
-          {/* Like button */}
           <LikeButton
             liked={entry.likedByMe}
             count={entry.likeCount}
@@ -209,49 +214,29 @@ function EntryCard({
             small
           />
           {isOwner && (
-            <>
-              <button
-                onClick={handleEdit}
-                style={{
-                  background: "none",
-                  border: "none",
-                  color: "#ccc",
-                  cursor: "pointer",
-                  fontSize: 12,
-                  padding: "3px 6px",
-                  borderRadius: 6,
-                  transition: "color 0.15s",
-                }}
-                onMouseEnter={(e) => (e.currentTarget.style.color = "#999")}
-                onMouseLeave={(e) => (e.currentTarget.style.color = "#ccc")}
-              >
-                編集
-              </button>
-              <button
-                onClick={handleDelete}
-                style={{
-                  background: "none",
-                  border: "none",
-                  color: "#ccc",
-                  cursor: "pointer",
-                  fontSize: 12,
-                  padding: "3px 6px",
-                  borderRadius: 6,
-                  transition: "color 0.15s",
-                }}
-                onMouseEnter={(e) => (e.currentTarget.style.color = "#999")}
-                onMouseLeave={(e) => (e.currentTarget.style.color = "#ccc")}
-              >
-                削除
-              </button>
-            </>
+            <button
+              onClick={handleDelete}
+              style={{
+                background: "none",
+                border: "none",
+                color: "#ccc",
+                cursor: "pointer",
+                fontSize: 12,
+                padding: "3px 6px",
+                borderRadius: 6,
+                transition: "color 0.15s",
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.color = "#999")}
+              onMouseLeave={(e) => (e.currentTarget.style.color = "#ccc")}
+            >
+              削除
+            </button>
           )}
         </div>
       </div>
 
       {/* Card Body */}
       <div style={{ padding: "10px 12px" }}>
-        {/* Featured image large */}
         {entry.featuredImage && (
           <div
             style={{
@@ -292,7 +277,6 @@ function EntryCard({
           </div>
         )}
 
-        {/* All images grid */}
         {visibleImages.length > 0 && (
           <div
             style={{
@@ -357,40 +341,69 @@ function EntryCard({
           </p>
         )}
 
-        {/* Memo (markdown, truncated) */}
         {entry.text && <Markdown text={entry.text} style={cardMemoStyle} />}
       </div>
     </div>
   );
 }
 
-// ── Detail Popup ──
+// ── Detail / Edit / Create Popup ──
 
-function DetailPopup({
+type PopupMode = "view" | "edit" | "create";
+
+function EntryPopup({
   entry,
+  mode: initialMode,
   originalSize,
   currentUserId,
   onClose,
   onDelete,
   onSetFeatured,
   onToggleLike,
+  onRefresh,
 }: {
-  entry: EntryMeta;
+  entry: EntryMeta | null; // null for create mode
+  mode: PopupMode;
   originalSize: boolean;
   currentUserId: string | null;
   onClose: () => void;
   onDelete: (id: string) => void;
   onSetFeatured: (id: string, img: string) => void;
   onToggleLike: (id: string) => void;
+  onRefresh: () => void;
 }) {
-  const isOwner = currentUserId === entry.user_id;
+  const isOwner = entry ? currentUserId === entry.user_id : true;
+  const [mode, setMode] = useState<PopupMode>(initialMode);
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  // Edit/create form state
+  const [editDate, setEditDate] = useState(
+    entry?.date || new Date().toISOString().split("T")[0]
+  );
+  const [editText, setEditText] = useState(entry?.text || "");
+  const [editImages, setEditImages] = useState<ImagePreview[]>(() => {
+    if (entry) {
+      return entry.images.map((name) => ({
+        name,
+        url: getImageUrl(entry.user_id, entry.id, name),
+        isExisting: true,
+      }));
+    }
+    return [];
+  });
+  const [editFeatured, setEditFeatured] = useState(entry?.featuredImage || "");
+  const [fileDragging, setFileDragging] = useState(false);
+  const [dragIdx, setDragIdx] = useState<number | null>(null);
+  const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleOverlayClick = (e: React.MouseEvent) => {
     if (e.target === e.currentTarget) onClose();
   };
 
   const handleDelete = () => {
+    if (!entry) return;
     if (!confirm("この記録を削除しますか？\nこの操作は元に戻せません。")) return;
     onDelete(entry.id);
     onClose();
@@ -411,7 +424,136 @@ function DetailPopup({
     };
   }, [onClose, lightboxSrc]);
 
-  const cols = Math.min(entry.images.length, 3);
+  // Switch to edit mode
+  const startEditing = () => {
+    if (!entry) return;
+    setEditDate(entry.date);
+    setEditText(entry.text);
+    setEditImages(
+      entry.images.map((name) => ({
+        name,
+        url: getImageUrl(entry.user_id, entry.id, name),
+        isExisting: true,
+      }))
+    );
+    setEditFeatured(entry.featuredImage);
+    setMode("edit");
+  };
+
+  const cancelEditing = () => {
+    setMode("view");
+  };
+
+  // Image handling
+  const addFiles = useCallback(
+    (files: FileList | File[]) => {
+      const newImages: ImagePreview[] = [];
+      for (const file of Array.from(files)) {
+        if (!file.type.startsWith("image/")) continue;
+        newImages.push({
+          name: file.name,
+          url: URL.createObjectURL(file),
+          file,
+        });
+      }
+      setEditImages((prev) => {
+        const updated = [...prev, ...newImages];
+        if (!editFeatured && updated.length > 0) {
+          setEditFeatured(updated[0].name);
+        }
+        return updated;
+      });
+    },
+    [editFeatured]
+  );
+
+  const removeImage = (name: string) => {
+    setEditImages((prev) => prev.filter((img) => img.name !== name));
+    if (editFeatured === name) {
+      const remaining = editImages.filter((img) => img.name !== name);
+      setEditFeatured(remaining.length > 0 ? remaining[0].name : "");
+    }
+  };
+
+  const handleFileDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setFileDragging(false);
+    if (e.dataTransfer.files.length > 0) {
+      addFiles(e.dataTransfer.files);
+    }
+  };
+
+  // Thumbnail drag-and-drop reorder
+  const handleThumbDragStart = (e: ReactDragEvent, idx: number) => {
+    setDragIdx(idx);
+    e.dataTransfer.effectAllowed = "move";
+  };
+  const handleThumbDragOver = (e: ReactDragEvent, idx: number) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    setDragOverIdx(idx);
+  };
+  const handleThumbDrop = (e: ReactDragEvent, idx: number) => {
+    e.preventDefault();
+    if (dragIdx === null || dragIdx === idx) {
+      setDragIdx(null);
+      setDragOverIdx(null);
+      return;
+    }
+    setEditImages((prev) => {
+      const updated = [...prev];
+      const [moved] = updated.splice(dragIdx, 1);
+      updated.splice(idx, 0, moved);
+      return updated;
+    });
+    setDragIdx(null);
+    setDragOverIdx(null);
+  };
+  const handleThumbDragEnd = () => {
+    setDragIdx(null);
+    setDragOverIdx(null);
+  };
+
+  // Submit
+  const handleSubmit = async () => {
+    setSubmitting(true);
+    try {
+      const formData = new FormData();
+      formData.set("date", editDate);
+      formData.set("text", editText);
+      formData.set("featuredImage", editFeatured);
+
+      const keepImages: string[] = [];
+      const orderedNames: string[] = [];
+      for (const img of editImages) {
+        if (img.file) {
+          formData.append("images", img.file);
+        } else if (img.isExisting) {
+          keepImages.push(img.name);
+        }
+        orderedNames.push(img.name);
+      }
+      formData.set("keepImages", JSON.stringify(keepImages));
+      formData.set("imageOrder", JSON.stringify(orderedNames));
+
+      if (mode === "create") {
+        await createEntryAction(formData);
+      } else if (entry) {
+        await updateEntryAction(entry.id, formData);
+      }
+
+      onRefresh();
+      onClose();
+    } catch (err) {
+      console.error(err);
+      alert("保存に失敗しました");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const cols = entry ? Math.min(entry.images.length, 3) : 3;
+  const isEditing = mode === "edit" || mode === "create";
 
   return (
     <>
@@ -421,11 +563,12 @@ function DetailPopup({
             background: "#fff",
             borderRadius: 14,
             width: "100%",
-            maxWidth: 680,
+            maxWidth: isEditing ? 760 : 680,
             margin: "auto",
             boxShadow: "0 8px 48px rgba(0,0,0,0.2)",
             overflow: "hidden",
             animation: "popupIn 0.18s ease",
+            transition: "max-width 0.2s",
           }}
         >
           {/* Header */}
@@ -439,66 +582,131 @@ function DetailPopup({
             }}
           >
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              {entry.authorAvatar && (
+              {!isEditing && entry?.authorAvatar && (
                 <img
                   src={entry.authorAvatar}
                   alt=""
                   style={{ width: 24, height: 24, borderRadius: "50%", objectFit: "cover" }}
                 />
               )}
-              <div>
-                <span style={{ fontSize: 18, fontWeight: 700 }}>
-                  {formatDate(entry.date)}
-                </span>
-                {entry.authorName && (
-                  <span style={{ fontSize: 11, color: "#999", marginLeft: 8 }}>
-                    by {entry.authorName}
+              {isEditing ? (
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <span style={{ fontSize: 14, fontWeight: 700 }}>
+                    {mode === "create" ? "今日の練習を記録" : "記録を編集"}
                   </span>
-                )}
-              </div>
+                  <input
+                    type="date"
+                    value={editDate}
+                    onChange={(e) => setEditDate(e.target.value)}
+                    style={{
+                      border: "1px solid #e0e0e0",
+                      borderRadius: 6,
+                      padding: "5px 10px",
+                      fontSize: 13,
+                      outline: "none",
+                      color: "var(--color-primary)",
+                      background: "#fafafa",
+                      fontFamily: "inherit",
+                    }}
+                  />
+                </div>
+              ) : (
+                <div>
+                  <span style={{ fontSize: 18, fontWeight: 700 }}>
+                    {formatDate(entry?.date)}
+                  </span>
+                  {entry?.authorName && (
+                    <span style={{ fontSize: 11, color: "#999", marginLeft: 8 }}>
+                      by {entry.authorName}
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <LikeButton
-                liked={entry.likedByMe}
-                count={entry.likeCount}
-                onClick={() => onToggleLike(entry.id)}
-                disabled={!currentUserId}
-              />
-              {isOwner && (
+              {isEditing ? (
                 <>
-                  <a
-                    href={`/entry/${entry.id}/edit`}
-                    style={{
-                      background: "none",
-                      border: "none",
-                      color: "#ccc",
-                      cursor: "pointer",
-                      fontSize: 12,
-                      padding: "3px 6px",
-                      borderRadius: 6,
-                      textDecoration: "none",
-                    }}
-                    onMouseEnter={(e) => (e.currentTarget.style.color = "#999")}
-                    onMouseLeave={(e) => (e.currentTarget.style.color = "#ccc")}
-                  >
-                    編集
-                  </a>
                   <button
-                    onClick={handleDelete}
+                    onClick={handleSubmit}
+                    disabled={submitting}
                     style={{
-                      background: "none",
+                      background: submitting ? "#e8e8e8" : "var(--color-primary)",
+                      color: submitting ? "#aaa" : "#fff",
                       border: "none",
-                      color: "#ccc",
-                      cursor: "pointer",
-                      fontSize: 12,
-                      padding: "3px 6px",
-                      borderRadius: 6,
+                      borderRadius: 8,
+                      padding: "7px 20px",
+                      fontSize: 13,
+                      fontWeight: 600,
+                      cursor: submitting ? "not-allowed" : "pointer",
                     }}
-                    onMouseEnter={(e) => (e.currentTarget.style.color = "#999")}
-                    onMouseLeave={(e) => (e.currentTarget.style.color = "#ccc")}
                   >
-                    削除
+                    {submitting ? "保存中..." : "保存"}
                   </button>
+                  {mode === "edit" && (
+                    <button
+                      onClick={cancelEditing}
+                      style={{
+                        background: "#f0f0ee",
+                        color: "#555",
+                        border: "none",
+                        borderRadius: 8,
+                        padding: "7px 14px",
+                        fontSize: 13,
+                        fontWeight: 600,
+                        cursor: "pointer",
+                      }}
+                    >
+                      キャンセル
+                    </button>
+                  )}
+                </>
+              ) : (
+                <>
+                  {entry && (
+                    <LikeButton
+                      liked={entry.likedByMe}
+                      count={entry.likeCount}
+                      onClick={() => onToggleLike(entry.id)}
+                      disabled={!currentUserId}
+                    />
+                  )}
+                  {isOwner && entry && (
+                    <>
+                      <button
+                        onClick={startEditing}
+                        style={{
+                          background: "none",
+                          border: "none",
+                          color: "#ccc",
+                          cursor: "pointer",
+                          fontSize: 12,
+                          padding: "3px 6px",
+                          borderRadius: 6,
+                          textDecoration: "none",
+                        }}
+                        onMouseEnter={(e) => (e.currentTarget.style.color = "#999")}
+                        onMouseLeave={(e) => (e.currentTarget.style.color = "#ccc")}
+                      >
+                        編集
+                      </button>
+                      <button
+                        onClick={handleDelete}
+                        style={{
+                          background: "none",
+                          border: "none",
+                          color: "#ccc",
+                          cursor: "pointer",
+                          fontSize: 12,
+                          padding: "3px 6px",
+                          borderRadius: 6,
+                        }}
+                        onMouseEnter={(e) => (e.currentTarget.style.color = "#999")}
+                        onMouseLeave={(e) => (e.currentTarget.style.color = "#ccc")}
+                      >
+                        削除
+                      </button>
+                    </>
+                  )}
                 </>
               )}
               <button
@@ -523,88 +731,306 @@ function DetailPopup({
 
           {/* Body */}
           <div style={{ padding: "20px 24px", maxHeight: "70vh", overflowY: "auto" }}>
-            {/* All images grid */}
-            {entry.images.length > 0 && (
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: `repeat(${cols}, 1fr)`,
-                  gap: 8,
-                  marginBottom: 16,
-                }}
-              >
-                {entry.images.map((img) => {
-                  const isFeatured = img === entry.featuredImage;
-                  const src = imgUrl(entry, img);
-                  return (
+            {isEditing ? (
+              /* ── Edit / Create body ── */
+              <>
+                {/* Image drop zone */}
+                <div
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setFileDragging(true);
+                  }}
+                  onDragLeave={() => setFileDragging(false)}
+                  onDrop={handleFileDrop}
+                  onClick={() => fileInputRef.current?.click()}
+                  style={{
+                    border: `1.5px dashed ${fileDragging ? "var(--color-primary)" : "#d4d4d4"}`,
+                    borderRadius: 10,
+                    padding: "20px 16px",
+                    textAlign: "center",
+                    cursor: "pointer",
+                    background: fileDragging ? "#f5f5f5" : "#fafafa",
+                    transition: "all 0.15s",
+                    marginBottom: 12,
+                  }}
+                >
+                  <p style={{ color: "#999", fontSize: 13, margin: 0 }}>
+                    クリックまたはドラッグ＆ドロップで画像を追加
+                  </p>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    style={{ display: "none" }}
+                    onChange={(e) => {
+                      if (e.target.files) addFiles(e.target.files);
+                      e.target.value = "";
+                    }}
+                  />
+                </div>
+
+                {/* Editable image grid */}
+                {editImages.length > 0 && (
+                  <>
+                    <div style={{ fontSize: 10, color: "#bbb", marginBottom: 4 }}>
+                      ドラッグで順番を変更 ・ クリックでハイライト設定
+                    </div>
                     <div
-                      key={img}
-                      className="img-wrapper"
-                      style={{ position: "relative" }}
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: `repeat(${Math.min(editImages.length, 4)}, 1fr)`,
+                        gap: 8,
+                        marginBottom: 16,
+                      }}
                     >
-                      <img
-                        src={src}
-                        alt=""
-                        style={{
-                          ...imgStyle(originalSize, false),
-                          borderRadius: 8,
-                          cursor: "zoom-in",
-                          border: isFeatured
-                            ? "2px solid var(--color-secondary)"
-                            : "1px solid #ebebeb",
-                        }}
-                        onClick={() => setLightboxSrc(src)}
-                      />
-                      {isFeatured && (
-                        <span
-                          style={{
-                            position: "absolute",
-                            top: 6,
-                            left: 6,
-                            background: "var(--color-secondary)",
-                            color: "#fff",
-                            fontSize: 10,
-                            fontWeight: 700,
-                            padding: "2px 7px",
-                            borderRadius: 4,
-                          }}
-                        >
-                          ハイライト
+                      {editImages.map((img, idx) => {
+                        const isFeatured = editFeatured === img.name;
+                        return (
+                          <div
+                            key={img.name + idx}
+                            draggable
+                            onDragStart={(e) => handleThumbDragStart(e, idx)}
+                            onDragOver={(e) => handleThumbDragOver(e, idx)}
+                            onDrop={(e) => handleThumbDrop(e, idx)}
+                            onDragEnd={handleThumbDragEnd}
+                            style={{
+                              position: "relative",
+                              opacity: dragIdx === idx ? 0.4 : 1,
+                              transform: dragOverIdx === idx && dragIdx !== idx ? "scale(1.05)" : "none",
+                              transition: "transform 0.15s, opacity 0.15s",
+                            }}
+                          >
+                            <img
+                              src={img.url}
+                              alt={img.name}
+                              onClick={() => setEditFeatured(img.name)}
+                              style={{
+                                width: "100%",
+                                aspectRatio: "1/1",
+                                objectFit: "cover",
+                                borderRadius: 8,
+                                border: isFeatured
+                                  ? "2px solid var(--color-secondary)"
+                                  : "1px solid #ebebeb",
+                                display: "block",
+                                cursor: "grab",
+                              }}
+                            />
+                            {isFeatured && (
+                              <span
+                                style={{
+                                  position: "absolute",
+                                  top: 4,
+                                  left: 4,
+                                  background: "var(--color-secondary)",
+                                  color: "#fff",
+                                  fontSize: 9,
+                                  fontWeight: 700,
+                                  padding: "2px 6px",
+                                  borderRadius: 3,
+                                }}
+                              >
+                                ハイライト
+                              </span>
+                            )}
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                removeImage(img.name);
+                              }}
+                              style={{
+                                position: "absolute",
+                                top: -5,
+                                right: -5,
+                                background: "var(--color-primary)",
+                                color: "#fff",
+                                border: "none",
+                                borderRadius: "50%",
+                                width: 20,
+                                height: 20,
+                                fontSize: 11,
+                                cursor: "pointer",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                fontWeight: 700,
+                              }}
+                            >
+                              ×
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
+
+                {/* Memo editor + preview */}
+                <label
+                  style={{
+                    display: "block",
+                    fontSize: 11,
+                    fontWeight: 600,
+                    color: "#888",
+                    marginBottom: 6,
+                    textTransform: "uppercase",
+                    letterSpacing: "0.5px",
+                  }}
+                >
+                  メモ
+                </label>
+                <div style={{ display: "flex", gap: 12 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 10, color: "#bbb", marginBottom: 4, fontWeight: 600 }}>
+                      編集
+                    </div>
+                    <textarea
+                      value={editText}
+                      onChange={(e) => setEditText(e.target.value)}
+                      rows={8}
+                      placeholder={"今日練習したこと、気づいたことなど\n\nMarkdownが使えます:\n**太字** *イタリック* - リスト"}
+                      style={{
+                        border: "1px solid #e0e0e0",
+                        borderRadius: 8,
+                        padding: "9px 12px",
+                        fontSize: 14,
+                        outline: "none",
+                        width: "100%",
+                        minHeight: 160,
+                        color: "var(--color-primary)",
+                        background: "#fafafa",
+                        fontFamily: "inherit",
+                        resize: "vertical",
+                        lineHeight: 1.6,
+                        boxSizing: "border-box",
+                      }}
+                      onFocus={(e) => (e.currentTarget.style.borderColor = "var(--color-primary)")}
+                      onBlur={(e) => (e.currentTarget.style.borderColor = "#e0e0e0")}
+                    />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 10, color: "#bbb", marginBottom: 4, fontWeight: 600 }}>
+                      プレビュー
+                    </div>
+                    <div
+                      className="md-content"
+                      style={{
+                        border: "1px solid #e0e0e0",
+                        borderRadius: 8,
+                        padding: "9px 12px",
+                        fontSize: 14,
+                        minHeight: 160,
+                        background: "#fafafa",
+                        color: "#555",
+                        lineHeight: 1.8,
+                        wordBreak: "break-word",
+                        overflowY: "auto",
+                      }}
+                    >
+                      {editText ? (
+                        <ReactMarkdown remarkPlugins={[remarkBreaks]}>
+                          {editText}
+                        </ReactMarkdown>
+                      ) : (
+                        <span style={{ color: "#ccc", fontSize: 13 }}>
+                          入力するとここにプレビューが表示されます
                         </span>
                       )}
-                      {isOwner && (
-                        <button
-                          className={`star-btn ${isFeatured ? "highlighted" : ""}`}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onSetFeatured(entry.id, img);
-                          }}
-                          title={isFeatured ? "ハイライト中" : "ハイライトに設定"}
-                          style={
-                            isFeatured
-                              ? { top: "auto", bottom: 4, left: 4, opacity: 1 }
-                              : {}
-                          }
-                        >
-                          {isFeatured ? "★" : "☆"}
-                        </button>
-                      )}
                     </div>
-                  );
-                })}
-              </div>
+                  </div>
+                </div>
+              </>
+            ) : (
+              /* ── View body ── */
+              <>
+                {/* All images grid */}
+                {entry && entry.images.length > 0 && (
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: `repeat(${cols}, 1fr)`,
+                      gap: 8,
+                      marginBottom: 16,
+                    }}
+                  >
+                    {entry.images.map((img) => {
+                      const isFeatured = img === entry.featuredImage;
+                      const src = imgUrl(entry, img);
+                      return (
+                        <div
+                          key={img}
+                          className="img-wrapper"
+                          style={{ position: "relative" }}
+                        >
+                          <img
+                            src={src}
+                            alt=""
+                            style={{
+                              ...imgStyle(originalSize, false),
+                              borderRadius: 8,
+                              cursor: "zoom-in",
+                              border: isFeatured
+                                ? "2px solid var(--color-secondary)"
+                                : "1px solid #ebebeb",
+                            }}
+                            onClick={() => setLightboxSrc(src)}
+                          />
+                          {isFeatured && (
+                            <span
+                              style={{
+                                position: "absolute",
+                                top: 6,
+                                left: 6,
+                                background: "var(--color-secondary)",
+                                color: "#fff",
+                                fontSize: 10,
+                                fontWeight: 700,
+                                padding: "2px 7px",
+                                borderRadius: 4,
+                              }}
+                            >
+                              ハイライト
+                            </span>
+                          )}
+                          {isOwner && (
+                            <button
+                              className={`star-btn ${isFeatured ? "highlighted" : ""}`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onSetFeatured(entry.id, img);
+                              }}
+                              title={isFeatured ? "ハイライト中" : "ハイライトに設定"}
+                              style={
+                                isFeatured
+                                  ? { top: "auto", bottom: 4, left: 4, opacity: 1 }
+                                  : {}
+                              }
+                            >
+                              {isFeatured ? "★" : "☆"}
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Memo */}
+                {entry?.text && <Markdown text={entry.text} style={memoStyle} />}
+
+                {/* Comments */}
+                {entry && (
+                  <div style={{ marginTop: 20 }}>
+                    <CommentSection
+                      entryId={entry.id}
+                      currentUserId={currentUserId}
+                    />
+                  </div>
+                )}
+              </>
             )}
-
-            {/* Memo */}
-            {entry.text && <Markdown text={entry.text} style={memoStyle} />}
-
-            {/* Comments */}
-            <div style={{ marginTop: 20 }}>
-              <CommentSection
-                entryId={entry.id}
-                currentUserId={currentUserId}
-              />
-            </div>
           </div>
         </div>
       </div>
@@ -627,13 +1053,16 @@ function DetailPopup({
 export default function EntryList({
   entries,
   currentUserId,
+  onRefresh,
 }: {
   entries: EntryMeta[];
   currentUserId: string | null;
+  onRefresh?: () => void;
 }) {
   const [showAllImages, setShowAllImages] = useState(false);
   const [originalSize, setOriginalSize] = useState(true);
   const [detailId, setDetailId] = useState<string | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
   const [entryList, setEntryList] = useState(entries);
   const [searchQuery, setSearchQuery] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -671,6 +1100,13 @@ export default function EntryList({
     return () => window.removeEventListener("scrollToDate", handler);
   }, []);
 
+  // Listen for create popup trigger from header
+  useEffect(() => {
+    const handler = () => setCreateOpen(true);
+    window.addEventListener("openCreatePopup", handler);
+    return () => window.removeEventListener("openCreatePopup", handler);
+  }, []);
+
   const handleDelete = useCallback(async (id: string) => {
     await deleteEntryAction(id);
     setEntryList((prev) => prev.filter((e) => e.id !== id));
@@ -699,6 +1135,10 @@ export default function EntryList({
       })
     );
   }, [currentUserId]);
+
+  const handleRefresh = useCallback(() => {
+    if (onRefresh) onRefresh();
+  }, [onRefresh]);
 
   const filteredEntries = searchQuery.trim()
     ? entryList.filter((e) =>
@@ -832,15 +1272,33 @@ export default function EntryList({
         </div>
       )}
 
+      {/* View / Edit popup */}
       {detailEntry && (
-        <DetailPopup
+        <EntryPopup
           entry={detailEntry}
+          mode="view"
           originalSize={originalSize}
           currentUserId={currentUserId}
           onClose={() => setDetailId(null)}
           onDelete={handleDelete}
           onSetFeatured={handleSetFeatured}
           onToggleLike={handleToggleLike}
+          onRefresh={handleRefresh}
+        />
+      )}
+
+      {/* Create popup */}
+      {createOpen && (
+        <EntryPopup
+          entry={null}
+          mode="create"
+          originalSize={originalSize}
+          currentUserId={currentUserId}
+          onClose={() => setCreateOpen(false)}
+          onDelete={() => {}}
+          onSetFeatured={() => {}}
+          onToggleLike={() => {}}
+          onRefresh={handleRefresh}
         />
       )}
     </>

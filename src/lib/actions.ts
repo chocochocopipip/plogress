@@ -4,7 +4,6 @@ import { createClient } from "@/lib/supabase/server";
 import { generateId } from "@/lib/entries";
 import { uploadFile, deleteFile, deleteFolder } from "@/lib/r2";
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 
 async function getAuthUser() {
   const supabase = await createClient();
@@ -45,7 +44,6 @@ export async function createEntryAction(formData: FormData) {
   if (error) throw error;
 
   revalidatePath("/");
-  redirect("/");
 }
 
 export async function updateEntryAction(id: string, formData: FormData) {
@@ -109,7 +107,6 @@ export async function updateEntryAction(id: string, formData: FormData) {
   if (error) throw error;
 
   revalidatePath("/");
-  redirect("/");
 }
 
 export async function deleteEntryAction(id: string) {

@@ -420,8 +420,8 @@ export default function Header({ entryCount, entryDates, user, activePage = "hom
 
           {user ? (
             <>
-              <a
-                href="/new"
+              <button
+                onClick={() => window.dispatchEvent(new Event("openCreatePopup"))}
                 style={{
                   background: "var(--color-primary)",
                   color: "#fff",
@@ -431,12 +431,11 @@ export default function Header({ entryCount, entryDates, user, activePage = "hom
                   fontSize: 13,
                   fontWeight: 600,
                   cursor: "pointer",
-                  textDecoration: "none",
                   transition: "opacity 0.15s",
                 }}
               >
                 + 記録を追加
-              </a>
+              </button>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: 4 }}>
                 {user.avatar ? (
                   <img
