@@ -1,10 +1,21 @@
 "use client";
 
 import { createClient } from "@/lib/supabase/client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 
 export default function LoginPage() {
   const [loading, setLoading] = useState(false);
+  const searchParams = useSearchParams();
+  const error = searchParams.get("error");
+
+  // If already logged in, redirect to home
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user) window.location.href = "/";
+    });
+  }, []);
 
   async function handleGoogleLogin() {
     setLoading(true);
@@ -92,6 +103,12 @@ export default function LoginPage() {
           </svg>
           {loading ? "ログイン中..." : "Googleでログイン"}
         </button>
+
+        {error && (
+          <p style={{ fontSize: 12, color: "#ef4444", marginTop: 16 }}>
+            ログインに失敗しました ({error})
+          </p>
+        )}
 
         <a
           href="/"

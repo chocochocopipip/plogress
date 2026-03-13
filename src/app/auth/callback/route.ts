@@ -3,17 +3,15 @@ import { createServerClient } from "@supabase/ssr";
 import type { NextRequest } from "next/server";
 
 export async function GET(request: NextRequest) {
-  const { searchParams } = new URL(request.url);
-  const code = searchParams.get("code");
-  const next = searchParams.get("next") || "/";
+  const url = new URL(request.url);
+  const code = url.searchParams.get("code");
+  const next = url.searchParams.get("next") || "/";
 
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL
-    || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
-
-  const redirectTo = `${siteUrl}${next}`;
+  // Always use the origin from the incoming request
+  const origin = url.origin;
 
   if (code) {
-    const response = NextResponse.redirect(redirectTo);
+    const response = NextResponse.redirect(`${origin}${next}`);
 
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -33,10 +31,15 @@ export async function GET(request: NextRequest) {
     );
 
     const { error } = await supabase.auth.exchangeCodeForSession(code);
+
     if (!error) {
       return response;
     }
+
+    // Auth failed — redirect to login with error
+    return NextResponse.redirect(`${origin}/login?error=auth`);
   }
 
-  return NextResponse.redirect(`${siteUrl}/login?error=auth`);
+  // No code — redirect to login
+  return NextResponse.redirect(`${origin}/login?error=no_code`);
 }
