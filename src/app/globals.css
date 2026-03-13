@@ -160,6 +160,12 @@ body {
 .md-content a { color: #2563eb; text-decoration: underline; }
 .md-content hr { border: none; border-top: 1px solid #e5e5e5; margin: 0.6em 0; }
 
+/* Skeleton pulse */
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
 /* Color picker swatch */
 .color-swatch {
   width: 24px;
